@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebForge Cloud Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap');
+        :root { --editor-bg: #1e1e1e; --header-bg: #2d2d2d; }
+        body { background-color: #121212; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; margin: 0; }
+        .editor-container { flex: 1; display: flex; flex-direction: row; overflow: hidden; transition: all 0.3s ease; }
+        @media (max-width: 768px) { .editor-container { flex-direction: column; } }
+        .pane { flex: 1; display: flex; flex-direction: column; position: relative; min-width: 300px; }
+        .pane-header { background-color: var(--header-bg); padding: 8px 16px; font-size: 0.75rem; text-transform: uppercase; font-weight: 600; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; color: #999; }
+        #editor { flex: 1; background-color: var(--editor-bg); color: #d4d4d4; font-family: 'Fira Code', monospace; font-size: 14px; padding: 15px; border: none; outline: none; resize: none; tab-size: 4; white-space: pre; overflow: auto; }
+        #preview-frame { flex: 1; background-color: white; border: none; width: 100%; height: 100%; }
+        
+        .btn { padding: 6px 12px; border-radius: 4px; font-weight: 500; transition: all 0.2s; display: flex; align-items: center; gap: 6px; font-size: 0.75rem; cursor: pointer; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-secondary { background: #4b5563; color: white; }
+        .btn-accent { background: #8b5cf6; color: white; }
+        
+        .preview-fullscreen {
+            position: fixed !important;
+            top: 0; left: 0; width: 100vw !important; height: 100vh !important;
+            z-index: 9999; background: white;
+        }
+        .fs-close-btn {
+            position: fixed; top: 1rem; right: 1rem; z-index: 10000;
+            background: rgba(0,0,0,0.5); color: white; padding: 8px; border-radius: 50%;
+            display: none; cursor: pointer;
+        }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
+        .modal-content { background: #2d2d2d; padding: 24px; border-radius: 12px; width: 100%; max-width: 450px; border: 1px solid #444; }
+        .project-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #3d3d3d; cursor: pointer; }
+        .project-item:hover { background: #3d3d3d; }
+    </style>
+</head>
+<body>
+
+    <header class="bg-[#1a1a1a] p-3 flex flex-wrap gap-3 justify-between items-center border-b border-[#333] z-10">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-bold text-white">WF</div>
+            <h1 class="text-md font-semibold">WebForge Cloud</h1>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <button class="btn btn-accent" onclick="window.pasteFromClipboard()">Paste</button>
+            <button class="btn btn-danger" onclick="window.clearEditor()">Clear</button>
+            <button class="btn btn-secondary" onclick="window.openLoadModal()">Load</button>
+            <button class="btn btn-primary" onclick="window.openSaveModal()">Save</button>
+            <button class="btn bg-green-600 text-white" onclick="window.runCode()">Run</button>
+        </div>
+    </header>
+
+    <div class="editor-container">
+        <div class="pane" id="editor-pane">
+            <div class="pane-header">
+                <span id="current-project-name">Unsaved Project</span>
+                <span id="auth-status" class="text-[10px] opacity-50">Connecting...</span>
+            </div>
+            <textarea id="editor" spellcheck="false" placeholder="Write or paste HTML here..."></textarea>
+        </div>
+        <div class="pane" id="preview-pane">
+            <div class="pane-header">
+                <span>Live Preview</span>
+                <button class="text-blue-400 hover:text-blue-300 text-[10px]" onclick="window.toggleFullScreen()">Full Screen</button>
+            </div>
+            <div id="preview-container" class="flex-1 relative">
+                <div id="fs-close" class="fs-close-btn" onclick="window.toggleFullScreen()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </div>
+                <iframe id="preview-frame" sandbox="allow-scripts allow-modals allow-forms"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <div id="save-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 class="text-lg font-bold mb-2 text-white">Save Project</h2>
+            <input type="text" id="project-name-input" class="w-full bg-[#1e1e1e] border border-[#444] p-3 rounded mb-4 text-white outline-none focus:border-blue-500" placeholder="My New Project">
+            <div class="flex justify-end gap-2">
+                <button class="btn btn-secondary" onclick="window.closeModals()">Cancel</button>
+                <button class="btn btn-primary" onclick="window.saveToCloud()">Save to Cloud</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="load-modal" class="modal-overlay">
+        <div class="modal-content text-white">
+            <h2 class="text-lg font-bold mb-4">Cloud Projects</h2>
+            <div id="projects-list" class="max-h-64 overflow-y-auto mb-4 border border-[#444] rounded bg-[#1e1e1e]"></div>
+            <div class="flex justify-end">
+                <button class="btn btn-secondary" onclick="window.closeModals()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 translate-y-20 transition-all duration-300 bg-blue-600 text-white px-6 py-2 rounded-full shadow-2xl z-50"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'html-code-runner-v2';
+
+        let currentUser = null;
+        const editor = document.getElementById('editor');
+        const previewFrame = document.getElementById('preview-frame');
+        const projectNameDisplay = document.getElementById('current-project-name');
+
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth Error", err);
+                document.getElementById('auth-status').textContent = "Offline Mode";
+            }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                document.getElementById('auth-status').textContent = "Cloud Sync Ready";
+                const temp = localStorage.getItem('wf_temp');
+                if (temp) { editor.value = temp; runCode(); }
+            }
+        });
+
+        initAuth();
+
+        window.runCode = () => {
+            const code = editor.value;
+            const blob = new Blob([code], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            previewFrame.src = url;
+            previewFrame.onload = () => URL.revokeObjectURL(url);
+        };
+
+        window.clearEditor = () => {
+            editor.value = "";
+            projectNameDisplay.textContent = "Unsaved Project";
+            localStorage.removeItem('wf_temp');
+            window.runCode();
+            showToast("Editor cleared");
+        };
+
+        window.pasteFromClipboard = async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    const start = editor.selectionStart;
+                    const end = editor.selectionEnd;
+                    editor.value = editor.value.substring(0, start) + text + editor.value.substring(end);
+                    editor.selectionStart = editor.selectionEnd = start + text.length;
+                    localStorage.setItem('wf_temp', editor.value);
+                    window.runCode();
+                    showToast("Pasted from clipboard");
+                }
+            } catch (err) {
+                showToast("Clipboard access denied", true);
+            }
+        };
+
+        window.toggleFullScreen = () => {
+            const container = document.getElementById('preview-container');
+            const closeBtn = document.getElementById('fs-close');
+            if (container.classList.contains('preview-fullscreen')) {
+                container.classList.remove('preview-fullscreen');
+                closeBtn.style.display = 'none';
+            } else {
+                container.classList.add('preview-fullscreen');
+                closeBtn.style.display = 'block';
+            }
+        };
+
+        window.saveToCloud = async () => {
+            if (!currentUser) return showToast("Authenticating...", true);
+            const name = document.getElementById('project-name-input').value.trim();
+            if (!name) return showToast("Enter project name", true);
+
+            try {
+                const projectRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'projects', name);
+                await setDoc(projectRef, {
+                    name,
+                    code: editor.value,
+                    updatedAt: Date.now()
+                });
+                projectNameDisplay.textContent = name;
+                window.closeModals();
+                showToast("Saved to cloud!");
+            } catch (e) {
+                showToast("Error saving project", true);
+            }
+        };
+
+        window.renderProjectsList = async () => {
+            if (!currentUser) return;
+            const list = document.getElementById('projects-list');
+            list.innerHTML = '<div class="p-4 text-center opacity-50">Fetching projects...</div>';
+
+            try {
+                const colRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'projects');
+                const snapshot = await getDocs(colRef);
+                list.innerHTML = '';
+                
+                if (snapshot.empty) {
+                    list.innerHTML = '<div class="p-4 text-center opacity-30 italic">No projects found</div>';
+                    return;
+                }
+
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const item = document.createElement('div');
+                    item.className = 'project-item';
+                    item.innerHTML = `
+                        <div class="flex-1">
+                            <div class="font-medium">${data.name}</div>
+                            <div class="text-[10px] opacity-40">${new Date(data.updatedAt).toLocaleDateString()}</div>
+                        </div>
+                        <button class="text-red-400 p-2 text-xs" onclick="event.stopPropagation(); window.deleteProject('${data.name}')">Delete</button>
+                    `;
+                    item.onclick = () => {
+                        editor.value = data.code;
+                        projectNameDisplay.textContent = data.name;
+                        window.runCode();
+                        window.closeModals();
+                    };
+                    list.appendChild(item);
+                });
+            } catch (e) {
+                list.innerHTML = '<div class="p-4 text-red-400">Error loading data</div>';
+            }
+        };
+
+        window.deleteProject = async (name) => {
+            if (!confirm(`Permanently delete "${name}"?`)) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'projects', name));
+                window.renderProjectsList();
+                showToast("Deleted");
+            } catch (e) { showToast("Delete failed", true); }
+        };
+
+        window.openSaveModal = () => document.getElementById('save-modal').style.display = 'flex';
+        window.openLoadModal = () => {
+            document.getElementById('load-modal').style.display = 'flex';
+            window.renderProjectsList();
+        };
+        window.closeModals = () => document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+
+        function showToast(msg, error = false) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.style.background = error ? '#ef4444' : '#2563eb';
+            t.classList.remove('translate-y-20');
+            setTimeout(() => t.classList.add('translate-y-20'), 3000);
+        }
+
+        editor.addEventListener('keydown', e => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const s = editor.selectionStart;
+                editor.value = editor.value.substring(0, s) + "  " + editor.value.substring(editor.selectionEnd);
+                editor.selectionEnd = s + 2;
+            }
+            localStorage.setItem('wf_temp', editor.value);
+        });
+
+        if(!editor.value) {
+            editor.value = `<h1>WebForge Editor</h1>\n<p>Try the Paste button to import code!</p>`;
+        }
+        window.runCode();
+    </script>
+</body>
+</html>
