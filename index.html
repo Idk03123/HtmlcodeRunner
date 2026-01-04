@@ -44,7 +44,7 @@
     <header class="bg-[#1a1a1a] p-3 flex flex-wrap gap-3 justify-between items-center border-b border-[#333] z-10">
         <div class="flex items-center gap-3">
             <div class="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-bold text-white">WF</div>
-            <h1 class="text-md font-semibold">WebForge Cloud</h1>
+            <h1 class="text-md font-semibold text-white">WebForge Cloud</h1>
         </div>
         <div class="flex flex-wrap gap-2">
             <button class="btn btn-accent" onclick="window.pasteFromClipboard()">Paste</button>
@@ -102,14 +102,24 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = JSON.parse(__firebase_config);
+        // Your specific Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCxE1960ZAD1q4H0-QqUdIB_BTE2gcJsv8",
+            authDomain: "htmlcoderunner.firebaseapp.com",
+            projectId: "htmlcoderunner",
+            storageBucket: "htmlcoderunner.firebasestorage.app",
+            messagingSenderId: "1047666926082",
+            appId: "1:1047666926082:web:525f29e9b1d47bab8bbd1b",
+            measurementId: "G-9HSEJZEXVV"
+        };
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'html-code-runner-v2';
+        const appId = 'html-code-runner-github';
 
         let currentUser = null;
         const editor = document.getElementById('editor');
@@ -118,11 +128,8 @@
 
         const initAuth = async () => {
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                // For GitHub pages, we use simple Anonymous sign-in
+                await signInAnonymously(auth);
             } catch (err) {
                 console.error("Auth Error", err);
                 document.getElementById('auth-status').textContent = "Offline Mode";
@@ -132,7 +139,7 @@
         onAuthStateChanged(auth, (user) => {
             currentUser = user;
             if (user) {
-                document.getElementById('auth-status').textContent = "Cloud Sync Ready";
+                document.getElementById('auth-status').textContent = "Cloud Active (" + user.uid.substring(0,6) + ")";
                 const temp = localStorage.getItem('wf_temp');
                 if (temp) { editor.value = temp; runCode(); }
             }
@@ -191,6 +198,7 @@
             if (!name) return showToast("Enter project name", true);
 
             try {
+                // Consistent with Firestore mandatory Rule 1
                 const projectRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'projects', name);
                 await setDoc(projectRef, {
                     name,
@@ -199,9 +207,10 @@
                 });
                 projectNameDisplay.textContent = name;
                 window.closeModals();
-                showToast("Saved to cloud!");
+                showToast("Saved to your cloud!");
             } catch (e) {
-                showToast("Error saving project", true);
+                console.error(e);
+                showToast("Error saving (check Firestore rules)", true);
             }
         };
 
@@ -279,7 +288,7 @@
         });
 
         if(!editor.value) {
-            editor.value = `<h1>WebForge Editor</h1>\n<p>Try the Paste button to import code!</p>`;
+            editor.value = `<h1>WebForge Editor</h1>\n<p>Your cloud storage is now linked!</p>`;
         }
         window.runCode();
     </script>
